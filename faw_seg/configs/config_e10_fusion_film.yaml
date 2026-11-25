@@ -1,0 +1,66 @@
+# PHASE 3 - RGB-thermal FUSION (e10, primary fusion model per project plan: FiLM).
+# Identical to e00 (main RGB model) in every training setting; the ONLY change is the added
+# thermal branch (registered apparent temperature, per-image z-scored, + footprint mask) fused into
+# every U-Net scale by spatial FiLM (zero-initialised, so it starts as the RGB model).
+project_root: ".."
+seed: 42
+
+paths:
+  rgb_damaged: dataset/rgb/damaged
+  rgb_healthy: dataset/rgb/healthy
+  flir_damaged: dataset/flir/damaged
+  flir_healthy: dataset/flir/healthy
+  masks: mask_annotation/masks_binary_v2
+  masks_v1: mask_annotation/masks_binary_final
+  phase1_model_code: src/phase1/experiment_06
+  outputs: faw_seg/outputs
+
+audit:
+  ncc_size: [160, 120]
+  ncc_pair_threshold: 0.5
+  dhash_size: 8
+  near_dup_hamming: 5
+  min_component_px: 10
+
+splits:
+  test_fraction: 0.15
+  n_folds: 5
+  block_gap_seconds: 15
+  max_block_size: 8
+  strata_bins: 3
+
+train:
+  exp_name: e10_rgbt_film_cv
+  patch: 320
+  stride: 160
+  batch_size: 4
+  crops_per_damaged_image: 4
+  healthy_fraction: 0.0
+  val_threshold: 0.5
+  lr_factor: 0.5
+  lr_patience: 4
+  min_lr: 1.0e-7
+  stage1: {epochs: 30, lr: 1.0e-3, patience: 8}
+  # Stage 2 disabled after fold 0 (2026-10-16): 12 fine-tuning epochs never beat the Stage-1 best
+  # (val 0.404-0.413 vs 0.421). Fold 0 result is identical with or without Stage 2.
+  stage2: {epochs: 0, lr: 1.0e-5, patience: 12, fine_tune_from: 100}
+  aug:
+    mode: exp06        # Phase 1 Exp 06 augmentation recipe; values below are ignored in this mode
+    scale: [0.8, 1.25]
+    hflip: true
+    vflip: true
+    brightness: 0.10
+    contrast: [0.8, 1.2]
+    saturation: [0.8, 1.2]
+    hue: 0.02
+  threshold_grid: [0.10, 0.90, 0.05]
+  healthy_fp_area_pct: 0.1
+
+model:
+  fusion: film        # film | concat
+
+# Final decision settings - chosen on POOLED OUT-OF-FOLD predictions only (scripts/12_tune_postprocessing.py
+# with FAW_CONFIG=config_e10_fusion_film.yaml, 2026-10-21, criterion = max mean per-image Dice). Test data not used.
+final:
+  threshold: 0.30
+  min_region_px: 50
